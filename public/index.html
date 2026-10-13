@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Del Campo · Comercio directo campesino–consumidor</title>
+  <meta name="description" content="Compre directo a la finca: cosechas por temporada, reservas anticipadas y precio justo.">
+  <meta name="theme-color" content="#2f6b3a">
+  <!-- URL del backend (otro repositorio). Se puede cambiar sin recompilar. -->
+  <meta name="api-url" content="http://localhost:3000">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icono.svg" type="image/svg+xml">
+  <!-- Precarga del módulo principal: el navegador lo descarga en paralelo con el CSS -->
+  <link rel="modulepreload" href="/js/main.js">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <!-- App shell (patrón PWA): esta estructura queda en caché y se pinta al instante incluso sin señal.
+       El contenido de #vista se renderiza en el cliente (CSR). -->
+  <header class="barra">
+    <a class="marca" href="#/catalogo">Del Campo</a>
+    <div id="estado-conexion" class="estado-conexion" aria-live="polite"></div>
+    <label class="selector-usuario">
+      <span class="oculto">Usuario de demostración</span>
+      <select id="usuario-actual"><option>Cargando…</option></select>
+    </label>
+  </header>
+  <nav class="navegacion" aria-label="Secciones">
+    <a href="#/catalogo" data-ruta="/catalogo">Catálogo</a>
+    <a href="#/mi-finca" data-ruta="/mi-finca">Mi finca</a>
+    <a href="#/reservas" data-ruta="/reservas">Reservas</a>
+    <a href="#/rendimiento" data-ruta="/rendimiento">Rendimiento</a>
+  </nav>
+  <main id="vista" class="contenido">
+    <p class="cargando">Cargando…</p>
+  </main>
+  <div id="avisos" class="avisos" role="status" aria-live="polite"></div>
+  <noscript>Esta aplicación necesita JavaScript.</noscript>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
