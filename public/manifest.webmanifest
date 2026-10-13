@@ -1,13 +1,13 @@
 {
   "name": "Del Campo – Comercio directo campesino–consumidor",
   "short_name": "Del Campo",
-  "start_url": "/#/catalogo",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f7f5ef",
-  "theme_color": "#2f6b3a",
+  "background_color": "#f6f4ee",
+  "theme_color": "#1f5130",
   "lang": "es-CO",
   "icons": [
-    { "src": "/icons/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }

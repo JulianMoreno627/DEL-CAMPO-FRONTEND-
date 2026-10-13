@@ -1,11 +1,11 @@
 {
   "name": "plataforma-campesino-frontend",
   "version": "0.1.0",
-  "description": "Frontend (PWA offline-first) del Caso de Estudio 3: Plataforma de comercialización directa campesino-consumidor",
+  "description": "Frontend (PWA) del Caso de Estudio 3: Plataforma de comercialización directa campesino-consumidor",
   "type": "module",
   "scripts": {
-    "start": "node servidor-estatico.js",
-    "dev": "node servidor-estatico.js"
+    "start": "node static-server.js",
+    "dev": "node static-server.js"
   },
   "engines": {
     "node": ">=20"

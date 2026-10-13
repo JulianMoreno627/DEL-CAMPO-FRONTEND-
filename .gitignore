@@ -1,3 +1,30 @@
+# ---- Dependencies
 node_modules/
+
+# ---- Secrets and credentials (never upload)
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+secrets/
+credentials*.json
+
+# ---- Logs and temporary files
 *.log
+npm-debug.log*
+logs/
+tmp/
+*.tmp
+
+# ---- OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp

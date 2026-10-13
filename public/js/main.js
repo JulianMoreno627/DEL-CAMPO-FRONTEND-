@@ -1,95 +1,138 @@
 import { API_URL } from './config.js';
-import { Almacen } from './nucleo/Almacen.js';
-import { ApiCliente } from './nucleo/ApiCliente.js';
-import { Router } from './nucleo/Router.js';
-import { BaseDatosLocal } from './offline/BaseDatosLocal.js';
-import { GestorSincronizacion } from './offline/GestorSincronizacion.js';
-import { MonitorRendimiento } from './metricas/MonitorRendimiento.js';
-import { ClienteWorker } from './workers/ClienteWorker.js';
-import { html } from './utilidades/formato.js';
+import { Store } from './core/Store.js';
+import { ApiClient } from './core/ApiClient.js';
+import { Router } from './core/Router.js';
+import { PerformanceMonitor } from './metrics/PerformanceMonitor.js';
+import { WorkerClient } from './workers/WorkerClient.js';
+import { html } from './utils/format.js';
+import { icon } from './utils/icons.js';
 
-// 1) Métricas primero, para no perder FCP/LCP de la carga inicial
-const monitor = new MonitorRendimiento({ urlReporte: `${API_URL}/api/metricas` });
-monitor.iniciar();
+// 1) Metrics first, so FCP/LCP of the initial load are not lost
+const monitor = new PerformanceMonitor({ reportUrl: `${API_URL}/api/metrics` });
+monitor.start();
 
-// 2) Service Worker: caché del app shell, estrategias por tipo de recurso y Background Sync
+// 2) Service Worker: app shell cache and per-resource strategies
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('Service Worker no registrado', e));
+  navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('Service Worker not registered', e));
 }
 
-const almacen = new Almacen({ usuario: null, usuarios: [], enLinea: navigator.onLine, pendientes: 0, sincronizando: false });
-const api = new ApiCliente(API_URL, { obtenerUsuarioId: () => almacen.estado.usuario?.id ?? null });
-const db = await new BaseDatosLocal().abrir();
-const sync = new GestorSincronizacion({ db, api });
+// Cleanup of data left by previous versions of the app (demo user picker, offline queue, old session key)
+try {
+  localStorage.removeItem('usuarioId');
+  localStorage.removeItem('sesion');
+} catch { /* private mode */ }
+indexedDB?.deleteDatabase('del-campo');
 
-// Los workers se crean al primer uso (ClienteWorker es perezoso)
-const workers = {
-  geo: new ClienteWorker(new URL('./workers/geo.worker.js', import.meta.url)),
-  imagen: new ClienteWorker(new URL('./workers/imagen.worker.js', import.meta.url)),
-};
-
-function avisar(mensaje, tipo = 'info') {
-  const el = Object.assign(document.createElement('div'), { className: `aviso ${tipo}`, textContent: mensaje });
-  document.getElementById('avisos').append(el);
-  setTimeout(() => el.remove(), tipo === 'error' ? 7000 : 4000);
+// ---- Session: { token, user } saved in the browser so the password is not asked every time
+const SESSION_KEY = 'session';
+function readSession() {
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY)) ?? null; } catch { return null; }
 }
 
-// ---- Indicador de conexión y cola offline (se suscribe al Almacén)
-const indicador = document.getElementById('estado-conexion');
-function pintarIndicador({ enLinea, pendientes, sincronizando }) {
-  indicador.innerHTML = String(html`
-    <span class="punto ${enLinea ? '' : 'fuera'}"></span>
-    <span>${enLinea ? 'En línea' : 'Sin conexión'}</span>
-    ${pendientes ? html`<button class="boton-sync" type="button" title="Cambios guardados en el teléfono">${sincronizando ? 'Sincronizando…' : `${pendientes} por enviar`}</button>` : ''}`);
-}
-indicador.addEventListener('click', (e) => { if (e.target.closest('.boton-sync')) sync.sincronizar(); });
-almacen.suscribir(pintarIndicador);
-pintarIndicador(almacen.estado);
-addEventListener('online', () => almacen.actualizar({ enLinea: true }));
-addEventListener('offline', () => almacen.actualizar({ enLinea: false }));
-
-sync.addEventListener('estado', (e) => almacen.actualizar(e.detail));
-sync.addEventListener('avisos', (e) => e.detail.forEach((m) => avisar(m, 'error')));
-
-// ---- Usuarios de demostración (mientras no hay login). Se guardan en IndexedDB para el modo offline.
-async function cargarUsuarios() {
-  try {
-    const usuarios = await api.get('/api/usuarios');
-    await db.guardarCache('usuarios', usuarios);
-    return usuarios;
-  } catch {
-    return (await db.leerCache('usuarios')) ?? [];
-  }
-}
-
-const selector = document.getElementById('usuario-actual');
-const usuarios = await cargarUsuarios();
-const idGuardado = (() => { try { return localStorage.getItem('usuarioId'); } catch { return null; } })();
-const usuarioInicial = usuarios.find((u) => u.id === idGuardado) ?? usuarios.find((u) => u.rol === 'COMPRADOR') ?? null;
-almacen.actualizar({ usuarios, usuario: usuarioInicial });
-
-selector.innerHTML = usuarios.length
-  ? String(html`
-    <optgroup label="Compradores">${usuarios.filter((u) => u.rol === 'COMPRADOR').map((u) => html`<option value="${u.id}">${u.nombre}</option>`)}</optgroup>
-    <optgroup label="Productores">${usuarios.filter((u) => u.rol === 'PRODUCTOR').map((u) => html`<option value="${u.id}">${u.nombre} (${u.vereda})</option>`)}</optgroup>`)
-  : '<option>Sin conexión con el servidor</option>';
-if (usuarioInicial) selector.value = usuarioInicial.id;
-
-// ---- Enrutador CSR con vistas cargadas bajo demanda (code splitting)
-const router = new Router(document.getElementById('vista'), {
-  '/catalogo': () => import('./vistas/VistaCatalogo.js'),
-  '/mi-finca': () => import('./vistas/VistaProductor.js'),
-  '/reservas': () => import('./vistas/VistaReservas.js'),
-  '/rendimiento': () => import('./vistas/VistaRendimiento.js'),
-}, { almacen, api, db, sync, monitor, workers, avisar, apiUrl: API_URL });
-
-selector.addEventListener('change', () => {
-  const usuario = almacen.estado.usuarios.find((u) => u.id === selector.value) ?? null;
-  try { localStorage.setItem('usuarioId', usuario?.id ?? ''); } catch { /* modo privado */ }
-  almacen.actualizar({ usuario });
-  if (usuario?.rol === 'PRODUCTOR' && location.hash.startsWith('#/catalogo')) location.hash = '#/mi-finca';
-  else router.recargar();
+const saved = readSession();
+const store = new Store({ user: saved?.user ?? null, token: saved?.token ?? null, cartCount: 0 });
+const api = new ApiClient(API_URL, {
+  getToken: () => store.state.token,
+  onUnauthorized: () => {
+    endSession();
+    notify('Su sesión venció. Ingrese de nuevo.', 'error');
+  },
 });
 
-sync.iniciar();
-await router.iniciar();
+/** Home route of each profile (the routes stay in Spanish because users see them). */
+const HOME = { PRODUCER: '/mis-anuncios', BUYER: '/productos' };
+
+function startSession({ token, user }) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ token, user })); } catch { /* private mode */ }
+  store.update({ token, user, cartCount: 0 });
+  if (user.role === 'BUYER') refreshCartCount();
+  location.hash = `#${HOME[user.role]}`;
+}
+
+function endSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch { /* private mode */ }
+  store.update({ token: null, user: null, cartCount: 0 });
+  location.hash = '#/entrar';
+}
+
+async function refreshCartCount() {
+  try {
+    const { items } = await api.get('/api/cart');
+    store.update({ cartCount: items.length });
+  } catch { /* no connection: keep the previous number */ }
+}
+
+function notify(message, type = 'info') {
+  const el = Object.assign(document.createElement('div'), { className: `toast ${type}`, textContent: message });
+  document.getElementById('toasts').append(el);
+  setTimeout(() => el.remove(), type === 'error' ? 7000 : 4000);
+}
+
+// ---- Header and sections according to the profile (subscribed to the Store)
+const SECTIONS = {
+  PRODUCER: [['/mis-anuncios', 'Mis productos', 'sprout'], ['/pedidos', 'Pedidos recibidos', 'receipt']],
+  BUYER: [['/productos', 'Productos', 'basket'], ['/carrito', 'Carrito', 'cart'], ['/pedidos', 'Mis pedidos', 'receipt']],
+};
+const nav = document.getElementById('nav');
+const account = document.getElementById('account');
+let renderedUserId;
+
+function renderHeader({ user, cartCount }) {
+  if (user?.id !== renderedUserId) {
+    renderedUserId = user?.id;
+    nav.hidden = !user;
+    nav.innerHTML = user ? String(html`${SECTIONS[user.role].map(([route, text, iconName]) =>
+      html`<a href="#${route}" data-route="${route}">${icon(iconName, { size: 18 })}${text}${route === '/carrito' ? html`<span id="cart-badge" class="badge"></span>` : ''}</a>`)}`) : '';
+    account.innerHTML = user ? String(html`
+      <span class="avatar" aria-hidden="true">${user.name.slice(0, 1).toUpperCase()}</span>
+      <span class="account-text"><b>${user.name}</b><small>${user.role === 'PRODUCER' ? 'Productor' : 'Comprador'}</small></span>
+      <button class="logout-button" type="button" data-action="logout">${icon('logout', { size: 16 })}Salir</button>`) : '';
+  }
+  const badge = document.getElementById('cart-badge');
+  if (badge) badge.textContent = cartCount ? String(cartCount) : '';
+}
+
+account.addEventListener('click', (e) => { if (e.target.closest('[data-action="logout"]')) endSession(); });
+store.subscribe(renderHeader);
+renderHeader(store.state);
+if (store.state.user?.role === 'BUYER') refreshCartCount();
+
+// Workers are created on first use (WorkerClient is lazy)
+const workers = {
+  geo: new WorkerClient(new URL('./workers/geo.worker.js', import.meta.url)),
+  image: new WorkerClient(new URL('./workers/image.worker.js', import.meta.url)),
+};
+
+// ---- CSR router with views loaded on demand (code splitting)
+/** Who may enter each section: one profile, anyone logged in, only logged out, or everyone. */
+const ACCESS = {
+  '/entrar': 'LOGGED_OUT',
+  '/mis-anuncios': 'PRODUCER',
+  '/productos': 'BUYER',
+  '/carrito': 'BUYER',
+  '/pedidos': 'LOGGED_IN',
+  '/rendimiento': 'EVERYONE',
+};
+
+function guard(route) {
+  const { user } = store.state;
+  const access = ACCESS[route];
+  if (access === 'EVERYONE') return route;
+  if (!user) return '/entrar';
+  if (access === 'LOGGED_IN' || access === user.role) return route;
+  return HOME[user.role];
+}
+
+const router = new Router(document.getElementById('view'), {
+  '/entrar': () => import('./views/LoginView.js'),
+  '/mis-anuncios': () => import('./views/MyProductsView.js'),
+  '/productos': () => import('./views/ProductsView.js'),
+  '/carrito': () => import('./views/CartView.js'),
+  '/pedidos': () => import('./views/OrdersView.js'),
+  '/rendimiento': () => import('./views/PerformanceView.js'),
+}, {
+  store, api, monitor, workers, notify, apiUrl: API_URL,
+  startSession, refreshCartCount,
+}, { guard });
+
+await router.start();

@@ -1,156 +1,145 @@
 /**
- * Service Worker de "Del Campo".
+ * "Del Campo" Service Worker.
  *
- * Estrategias de caché por tipo de recurso:
- *  - App shell (HTML, CSS, JS, workers): precache en install + stale-while-revalidate
- *      → la app abre al instante y sin señal; se actualiza en segundo plano.
- *  - Catálogo / perfiles / usuarios (API): network-first con timeout de 4 s y respaldo en caché
- *      → datos frescos si hay buena señal; si la red es lenta o no hay, la última copia.
- *  - Precios de referencia (API): stale-while-revalidate (cambian poco).
- *  - Fotos: cache-first con límite de entradas (no se vuelven a descargar).
- *  - POST/PATCH y datos por usuario (reservas): nunca se cachean.
+ * Cache strategies per resource type:
+ *  - App shell (HTML, CSS, JS, workers): precache on install + network-first with a timeout
+ *      → with signal the latest version is always shown; without signal it opens from the cache.
+ *  - Public list of listings (API): network-first with a 4 s timeout and a cache fallback
+ *      → fresh data with good signal; if the network is slow or down, the last copy.
+ *  - Photos: cache-first with an entry limit (they are not downloaded again).
+ *  - Writes and per-user data (cart, orders, my listings): never cached.
  *
- * Además: Background Sync (avisa a la app que sincronice al volver la señal) y
- * manejadores de Web Push listos para la siguiente entrega.
+ * Also: Web Push handlers ready for the next delivery.
  */
-const VERSION = 'v1';
-const CACHE_SHELL = `shell-${VERSION}`;
-const CACHE_API = `api-${VERSION}`;
-const CACHE_IMG = `img-${VERSION}`;
-const MAX_IMAGENES = 60;
-const TIMEOUT_RED_MS = 4000;
+const VERSION = 'v5';
+const SHELL_CACHE = `shell-${VERSION}`;
+const API_CACHE = `api-${VERSION}`;
+const IMAGE_CACHE = `img-${VERSION}`;
+const MAX_IMAGES = 60;
+const NETWORK_TIMEOUT_MS = 4000;
 
 const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/icons/icono.svg',
+  '/icons/icon.svg',
   '/css/app.css',
   '/js/main.js',
   '/js/config.js',
-  '/js/nucleo/Almacen.js',
-  '/js/nucleo/ApiCliente.js',
-  '/js/nucleo/Componente.js',
-  '/js/nucleo/Router.js',
-  '/js/offline/BaseDatosLocal.js',
-  '/js/offline/GestorSincronizacion.js',
-  '/js/metricas/MonitorRendimiento.js',
-  '/js/workers/ClienteWorker.js',
+  '/js/core/Store.js',
+  '/js/core/ApiClient.js',
+  '/js/core/Component.js',
+  '/js/core/Router.js',
+  '/js/metrics/PerformanceMonitor.js',
+  '/js/workers/WorkerClient.js',
   '/js/workers/geo.worker.js',
-  '/js/workers/imagen.worker.js',
-  '/js/utilidades/formato.js',
-  '/js/utilidades/geo.js',
-  '/js/componentes/mapaLigero.js',
-  '/js/vistas/VistaCatalogo.js',
-  '/js/vistas/VistaProductor.js',
-  '/js/vistas/VistaReservas.js',
-  '/js/vistas/VistaRendimiento.js',
+  '/js/workers/image.worker.js',
+  '/js/utils/format.js',
+  '/js/utils/geo.js',
+  '/js/utils/icons.js',
+  '/js/components/product.js',
+  '/js/views/LoginView.js',
+  '/js/views/MyProductsView.js',
+  '/js/views/ProductsView.js',
+  '/js/views/CartView.js',
+  '/js/views/OrdersView.js',
+  '/js/views/PerformanceView.js',
 ];
 
-// Rutas de la API que se pueden cachear (no dependen del usuario que las pide)
-const API_NETWORK_FIRST = [/\/api\/catalogo/, /\/api\/temporada/, /\/api\/productores\//, /\/api\/usuarios$/];
-const API_SWR = [/\/api\/precios\//];
+// API routes that can be cached (they do not depend on the user asking)
+const API_NETWORK_FIRST = [/\/api\/listings$/];
 
-self.addEventListener('install', (evento) => {
-  evento.waitUntil(caches.open(CACHE_SHELL).then((c) => c.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+self.addEventListener('install', (event) => {
+  // cache: 'reload' → the precache fetches the files from the server, never an old copy from the HTTP cache
+  event.waitUntil(caches.open(SHELL_CACHE)
+    .then((cache) => cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
-self.addEventListener('activate', (evento) => {
-  const vigentes = [CACHE_SHELL, CACHE_API, CACHE_IMG];
-  evento.waitUntil((async () => {
-    for (const nombre of await caches.keys()) if (!vigentes.includes(nombre)) await caches.delete(nombre);
+self.addEventListener('activate', (event) => {
+  const current = [SHELL_CACHE, API_CACHE, IMAGE_CACHE];
+  event.waitUntil((async () => {
+    let hadOldVersion = false;
+    for (const name of await caches.keys()) {
+      if (!current.includes(name)) {
+        await caches.delete(name);
+        hadOldVersion = true;
+      }
+    }
     await self.clients.claim();
+    // Open tabs keep showing the old version: they are reloaded so they see the new one
+    if (hadOldVersion) {
+      for (const client of await self.clients.matchAll({ type: 'window' })) client.navigate(client.url).catch(() => {});
+    }
   })());
 });
 
-self.addEventListener('fetch', (evento) => {
-  const { request } = evento;
-  if (request.method !== 'GET') return; // escrituras: las maneja la cola offline de la app
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return; // writes always go to the network
   const url = new URL(request.url);
 
   if (url.pathname.startsWith('/api/')) {
-    if (API_NETWORK_FIRST.some((r) => r.test(url.pathname))) return evento.respondWith(redPrimero(request, CACHE_API));
-    if (API_SWR.some((r) => r.test(url.pathname))) return evento.respondWith(obsoletoMientrasRevalida(request, CACHE_API));
-    return; // resto de la API (reservas, métricas…): siempre a la red
+    if (API_NETWORK_FIRST.some((r) => r.test(url.pathname))) return event.respondWith(networkFirst(request, API_CACHE));
+    return; // the rest of the API (cart, orders, metrics…): always to the network
   }
-  if (url.pathname.startsWith('/uploads/')) return evento.respondWith(cachePrimero(request, CACHE_IMG));
+  if (url.pathname.startsWith('/uploads/')) return event.respondWith(cacheFirst(request, IMAGE_CACHE));
   if (url.origin !== self.location.origin) return;
 
-  // Navegación del SPA: siempre el app shell (las rutas viven en el #hash)
-  if (request.mode === 'navigate') return evento.respondWith(obsoletoMientrasRevalida(new Request('/index.html'), CACHE_SHELL));
-  evento.respondWith(obsoletoMientrasRevalida(request, CACHE_SHELL));
+  // SPA navigation: always the app shell (the routes live in the #hash)
+  // cache: 'no-cache' → revalidated with the server even if the browser has a copy in its HTTP cache
+  if (request.mode === 'navigate') return event.respondWith(networkFirst(new Request('/index.html', { cache: 'no-cache' }), SHELL_CACHE));
+  event.respondWith(networkFirst(new Request(request, { cache: 'no-cache' }), SHELL_CACHE));
 });
 
-async function redPrimero(request, nombreCache) {
-  const cache = await caches.open(nombreCache);
+async function networkFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
   try {
-    const respuesta = await conTimeout(fetch(request), TIMEOUT_RED_MS);
-    if (respuesta.ok) cache.put(request, respuesta.clone());
-    return respuesta;
+    const response = await withTimeout(fetch(request), NETWORK_TIMEOUT_MS);
+    if (response.ok) cache.put(request, response.clone());
+    return response;
   } catch {
-    const guardada = await cache.match(request);
-    return guardada ?? new Response(JSON.stringify({ error: 'Sin conexión y sin copia guardada' }), {
+    const cached = await cache.match(request);
+    return cached ?? new Response(JSON.stringify({ error: 'Sin conexión con el servidor' }), {
       status: 503, headers: { 'Content-Type': 'application/json' },
     });
   }
 }
 
-async function obsoletoMientrasRevalida(request, nombreCache) {
-  const cache = await caches.open(nombreCache);
-  const guardada = await cache.match(request);
-  const actualizacion = fetch(request)
-    .then((respuesta) => {
-      if (respuesta.ok) cache.put(request, respuesta.clone());
-      return respuesta;
-    })
-    .catch(() => null);
-  if (guardada) return guardada;
-  return (await actualizacion) ?? new Response('Sin conexión', { status: 503 });
-}
-
-async function cachePrimero(request, nombreCache) {
-  const cache = await caches.open(nombreCache);
-  const guardada = await cache.match(request);
-  if (guardada) return guardada;
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
   try {
-    const respuesta = await fetch(request);
-    if (respuesta.ok) {
-      await cache.put(request, respuesta.clone());
-      limitarEntradas(cache, MAX_IMAGENES);
+    const response = await fetch(request);
+    if (response.ok) {
+      await cache.put(request, response.clone());
+      limitEntries(cache, MAX_IMAGES);
     }
-    return respuesta;
+    return response;
   } catch {
     return new Response('', { status: 503 });
   }
 }
 
-async function limitarEntradas(cache, maximo) {
-  const claves = await cache.keys();
-  for (const clave of claves.slice(0, Math.max(0, claves.length - maximo))) await cache.delete(clave);
+async function limitEntries(cache, max) {
+  const keys = await cache.keys();
+  for (const key of keys.slice(0, Math.max(0, keys.length - max))) await cache.delete(key);
 }
 
-function conTimeout(promesa, ms) {
-  return Promise.race([promesa, new Promise((_, rechazar) => setTimeout(() => rechazar(new Error('timeout')), ms))]);
+function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
 }
 
-// ---- Background Sync: cuando vuelve la señal, avisa a la app para que vacíe la cola de IndexedDB
-self.addEventListener('sync', (evento) => {
-  if (evento.tag !== 'sincronizar-cosechas') return;
-  evento.waitUntil((async () => {
-    const clientes = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
-    for (const cliente of clientes) cliente.postMessage({ tipo: 'SINCRONIZAR' });
-  })());
-});
-
-// ---- Web Push (siguiente entrega): "La cosecha que reservó ya está disponible"
-self.addEventListener('push', (evento) => {
-  const datos = evento.data?.json() ?? { titulo: 'Del Campo', cuerpo: 'Tiene novedades en sus reservas' };
-  evento.waitUntil(self.registration.showNotification(datos.titulo, {
-    body: datos.cuerpo, icon: '/icons/icono.svg', data: { url: datos.url ?? '/#/reservas' },
+// ---- Web Push (next delivery): "The producer confirmed your order"
+self.addEventListener('push', (event) => {
+  const data = event.data?.json() ?? { title: 'Del Campo', body: 'Tiene novedades en sus pedidos' };
+  event.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body, icon: '/icons/icon.svg', data: { url: data.url ?? '/#/pedidos' },
   }));
 });
 
-self.addEventListener('notificationclick', (evento) => {
-  evento.notification.close();
-  evento.waitUntil(self.clients.openWindow(evento.notification.data?.url ?? '/'));
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow(event.notification.data?.url ?? '/'));
 });

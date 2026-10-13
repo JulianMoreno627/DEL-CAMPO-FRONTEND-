@@ -4,37 +4,29 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Del Campo · Comercio directo campesino–consumidor</title>
-  <meta name="description" content="Compre directo a la finca: cosechas por temporada, reservas anticipadas y precio justo.">
-  <meta name="theme-color" content="#2f6b3a">
-  <!-- URL del backend (otro repositorio). Se puede cambiar sin recompilar. -->
+  <meta name="description" content="Compre directo al campesino: los productores publican lo que cultivan y usted lo compra.">
+  <meta name="theme-color" content="#ffffff">
+  <!-- Backend URL (another repository). It can be changed without rebuilding. -->
   <meta name="api-url" content="http://localhost:3000">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/icons/icono.svg" type="image/svg+xml">
-  <!-- Precarga del módulo principal: el navegador lo descarga en paralelo con el CSS -->
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <!-- Preload of the main module: the browser downloads it in parallel with the CSS -->
   <link rel="modulepreload" href="/js/main.js">
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-  <!-- App shell (patrón PWA): esta estructura queda en caché y se pinta al instante incluso sin señal.
-       El contenido de #vista se renderiza en el cliente (CSR). -->
-  <header class="barra">
-    <a class="marca" href="#/catalogo">Del Campo</a>
-    <div id="estado-conexion" class="estado-conexion" aria-live="polite"></div>
-    <label class="selector-usuario">
-      <span class="oculto">Usuario de demostración</span>
-      <select id="usuario-actual"><option>Cargando…</option></select>
-    </label>
+  <!-- App shell (PWA pattern): this structure is cached and painted instantly, even without signal.
+       The content of #view is rendered on the client (CSR). -->
+  <header class="topbar">
+    <a class="brand" href="#/"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19c0-9 6-14 15-14 0 9-5 15-14 15"/><path d="M5 19c3-4 6-7 10-9"/></svg>Del Campo</a>
+    <div id="account" class="account"></div>
   </header>
-  <nav class="navegacion" aria-label="Secciones">
-    <a href="#/catalogo" data-ruta="/catalogo">Catálogo</a>
-    <a href="#/mi-finca" data-ruta="/mi-finca">Mi finca</a>
-    <a href="#/reservas" data-ruta="/reservas">Reservas</a>
-    <a href="#/rendimiento" data-ruta="/rendimiento">Rendimiento</a>
-  </nav>
-  <main id="vista" class="contenido">
-    <p class="cargando">Cargando…</p>
+  <!-- The sections depend on the profile used to log in (producer or buyer) -->
+  <nav id="nav" class="nav" aria-label="Secciones" hidden></nav>
+  <main id="view" class="content">
+    <p class="loading">Cargando…</p>
   </main>
-  <div id="avisos" class="avisos" role="status" aria-live="polite"></div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
   <noscript>Esta aplicación necesita JavaScript.</noscript>
   <script type="module" src="/js/main.js"></script>
 </body>
