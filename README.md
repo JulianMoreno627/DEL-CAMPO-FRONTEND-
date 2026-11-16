@@ -25,6 +25,18 @@ Al entrar se elige el perfil:
 
 La vista de métricas de rendimiento sigue disponible en `#/rendimiento` (no aparece en el menú).
 
+### Asistente de IA: "Publica con una foto"
+
+En el editor de productos, al elegir una foto aparece el botón **"✨ Completar con IA"**. Al tocarlo:
+
+1. La foto, ya comprimida por el Web Worker, se envía a `POST /api/assistant/listing-suggestion`.
+2. El backend la analiza con Gemini, o con Groq si Gemini falla.
+3. La IA llena el **nombre**, la **descripción**, la **unidad** y la **categoría**.
+4. Se muestra el **precio justo sugerido** según los precios de referencia, con un botón para usarlo.
+5. Si la foto no muestra un producto del campo, o está oscura o borrosa, el asistente lo avisa.
+
+La IA solo sugiere: el productor revisa y corrige todo antes de publicar. Esta petición tiene 25 s de espera, en lugar de los 10 s de las demás.
+
 ## Qué hay en cada carpeta
 
 ```
