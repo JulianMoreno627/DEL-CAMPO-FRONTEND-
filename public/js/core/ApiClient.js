@@ -29,7 +29,11 @@ export class ApiClient {
     return this.baseUrl + route;
   }
 
-  async request(method, route, { body, headers: extraHeaders = {} } = {}) {
+  /**
+   * @param {object} [options]
+   * @param {number} [options.timeoutMs] longer wait for a slow request (e.g. the AI assistant)
+   */
+  async request(method, route, { body, headers: extraHeaders = {}, timeoutMs = this.timeoutMs } = {}) {
     const headers = { ...extraHeaders };
     const token = this.getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -44,7 +48,7 @@ export class ApiClient {
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response;
     try {
       response = await fetch(this.url(route), { method, headers, body: payload, signal: controller.signal });

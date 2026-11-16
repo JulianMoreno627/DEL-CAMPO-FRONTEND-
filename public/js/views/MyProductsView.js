@@ -5,12 +5,16 @@ import { productCard, productPhoto } from '../components/product.js';
 
 const UNITS = ['kg', 'libra', 'unidad', 'docena', 'bulto', 'canastilla', 'atado'];
 const MAX_DESCRIPTION = 300;
+/** The AI may need a few seconds (and a second provider if the first one fails). */
+const AI_TIMEOUT_MS = 25_000;
 
 /**
  * Producer profile: their catalog.
  * - Summary (published products, orders to attend, sales).
  * - List of published products with how much has been sold.
  * - Editor in a <dialog> to create or edit, with a live preview of how the buyer will see it.
+ * - AI assistant ("Publica con una foto"): from the photo it fills the name, description and unit and
+ *   suggests the fair price. It only suggests: the producer reviews everything before publishing.
  *
  * The page is rendered once; afterwards only regions are re-rendered (#summary, #list, dialog content)
  * so what the producer is typing is never wiped out.
@@ -20,6 +24,7 @@ export default class MyProductsView extends Component {
   #editing = null;       // listing being edited, or null if it is a new one
   #newPhoto = null;      // Blob already compressed by the Web Worker
   #previewUrl = null;
+  #assist = { status: 'idle' }; // AI assistant: idle | loading | done | error
 
   async onMount() {
     this.on('click', '[data-action="new"]', () => this.openEditor(null));
@@ -30,8 +35,11 @@ export default class MyProductsView extends Component {
     this.on('click', '[data-action="remove-photo"]', (e) => { e.preventDefault(); this.usePhoto(null); });
     this.on('change', '#editor [name="photo"]', (_e, el) => this.usePhoto(el.files[0]));
     this.on('input', '#editor form', () => this.renderPreview());
-    this.on('change', '#editor select', () => this.renderPreview());
+    // A different unit may change whether the AI fair price applies (it is per kg, per unit…)
+    this.on('change', '#editor select', () => { this.renderPreview(); this.#renderAssist(); });
     this.on('submit', '#editor form', (e, form) => { e.preventDefault(); this.save(form); });
+    this.on('click', '[data-action="ai-suggest"]', () => this.suggestWithAi());
+    this.on('click', '[data-action="ai-use-price"]', (_e, button) => this.#usePrice(Number(button.dataset.price)));
     // Drag and drop a photo onto the image area
     this.on('dragover', '.photo-drop', (e, zone) => { e.preventDefault(); zone.classList.add('dragging'); });
     this.on('dragleave', '.photo-drop', (_e, zone) => zone.classList.remove('dragging'));
@@ -64,11 +72,13 @@ export default class MyProductsView extends Component {
   openEditor(listing) {
     this.#editing = listing ?? null;
     this.#newPhoto = null;
+    this.#assist = { status: 'idle' };
     this.#releasePreview();
     const dialog = this.$('#editor');
     dialog.innerHTML = String(this.#editorTemplate());
     dialog.showModal();
     this.renderPreview();
+    this.#renderAssist();
     dialog.querySelector('[name="product"]').focus();
   }
 
@@ -91,7 +101,98 @@ export default class MyProductsView extends Component {
     }
     this.$('#editor [name="photo"]').value = ''; // allows picking the same file again
     this.$('#editor .photo-drop-content').innerHTML = String(this.#photoDropContent());
+    this.#assist = { status: 'idle' }; // a new photo: the previous suggestion no longer applies
     this.renderPreview();
+    this.#renderAssist();
+  }
+
+  // ---------- AI assistant ("Publica con una foto")
+
+  /** Sends the photo (already compressed) to the backend, which asks the AI. */
+  async suggestWithAi() {
+    if (!this.#newPhoto || this.#assist.status === 'loading') return;
+    this.#assist = { status: 'loading' };
+    this.#renderAssist();
+    try {
+      const suggestion = await this.props.api.post('/api/assistant/listing-suggestion', this.#newPhoto, { timeoutMs: AI_TIMEOUT_MS });
+      this.#assist = { status: 'done', suggestion };
+      if (suggestion.recognized) this.#applySuggestion(suggestion);
+    } catch (error) {
+      this.#assist = { status: 'error', message: error.message };
+    }
+    this.#renderAssist();
+  }
+
+  /** Fills the form with what the AI suggested (the producer can still change everything). */
+  #applySuggestion({ product, description, unit, category }) {
+    const form = this.$('#editor form');
+    if (!form) return; // the editor was closed while the AI answered
+    form.elements.product.value = product;
+    if (description) form.elements.description.value = description;
+    const unitSelect = form.elements.unit;
+    if (!unitSelect.disabled && UNITS.includes(unit)) unitSelect.value = unit;
+    form.elements.category.value = category;
+    this.renderPreview();
+  }
+
+  #usePrice(price) {
+    const input = this.$('#editor [name="price"]');
+    if (!input || !(price > 0)) return;
+    input.value = price;
+    this.renderPreview();
+    input.focus();
+  }
+
+  #renderAssist() {
+    const target = this.$('#editor .ai-assist');
+    if (!target) return;
+    target.innerHTML = this.#newPhoto ? String(this.#assistTemplate()) : '';
+  }
+
+  #assistTemplate() {
+    const { status, suggestion, message } = this.#assist;
+    if (status === 'loading') {
+      return html`<p class="ai-loading">${icon('sparkles', { size: 18 })} Mirando la foto…</p>`;
+    }
+    if (status === 'error') {
+      return html`
+<p class="notice error">${message}</p>
+<button type="button" class="btn secondary block" data-action="ai-suggest">${icon('sparkles', { size: 18 })}Intentar de nuevo</button>`;
+    }
+    if (status === 'done') return this.#suggestionTemplate(suggestion);
+    return html`
+<button type="button" class="btn ai-button block" data-action="ai-suggest">${icon('sparkles', { size: 18 })}Completar con IA</button>
+<p class="muted small">La IA mira la foto y llena el nombre, la descripción y la unidad. Usted revisa antes de publicar.</p>`;
+  }
+
+  #suggestionTemplate(s) {
+    const retry = html`<button type="button" class="link-button" data-action="ai-suggest">Volver a intentar</button>`;
+    const tip = s.photoTip ? html`<p class="notice warning">${icon('camera', { size: 16 })} ${s.photoTip}</p>` : '';
+    if (!s.recognized) {
+      return html`<div class="ai-result">
+  <p><b>No reconocimos un producto del campo en la foto.</b> Puede llenar los datos a mano.</p>
+  ${tip}${retry}
+</div>`;
+    }
+    const unsure = s.confidence < 0.6 ? html`<p class="muted small">No estamos muy seguros: revise bien el nombre.</p>` : '';
+    return html`<div class="ai-result">
+  <p class="ai-title">${icon('sparkles', { size: 18 })} Parece <b>${s.product}</b> <span class="chip">${Math.round(s.confidence * 100)} % seguro</span></p>
+  <p class="muted small">Llenamos el nombre, la descripción y la unidad. Revíselos antes de publicar.</p>
+  ${unsure}${this.#fairPriceTemplate(s.fairPrice)}${tip}${retry}
+</div>`;
+  }
+
+  #fairPriceTemplate(fair) {
+    if (!fair) return html`<p class="muted small">Todavía no tenemos precio de referencia para este producto.</p>`;
+    const suggested = Math.round((fair.min + fair.max) / 2 / 50) * 50;
+    const sameUnit = this.$('#editor [name="unit"]')?.value === fair.unit;
+    return html`<div class="ai-price">
+  <p>Precio justo sugerido: <b>${formatPrice(fair.min)} – ${formatPrice(fair.max)}</b> por ${fair.unit}</p>
+  <p class="muted small">En la ciudad se paga ${formatPrice(fair.marketPrice)} por ${fair.unit}. Así usted gana más que vendiéndole al intermediario y el comprador paga menos que en la tienda.</p>
+  ${sameUnit
+    ? html`<button type="button" class="btn secondary" data-action="ai-use-price" data-price="${suggested}">Usar ${formatPrice(suggested)}</button>`
+    : html`<p class="muted small">La referencia es por ${fair.unit}; usted vende por otra unidad, así que ajuste el precio.</p>`}
+</div>`;
   }
 
   /** The product as it will look, built from what is typed in the form. */
@@ -127,6 +228,7 @@ export default class MyProductsView extends Component {
     const button = form.querySelector('button[type="submit"]');
     const data = Object.fromEntries(new FormData(form));
     delete data.photo;
+    if (!data.category) delete data.category; // only when the AI suggested one; otherwise the backend default
     data.price = Number(data.price);
     data.quantity = Number(data.quantity);
 
@@ -275,10 +377,12 @@ ${listing.soldQuantity === 0
           <input name="photo" type="file" accept="image/*" class="visually-hidden">
           <span class="photo-drop-content">${this.#photoDropContent()}</span>
         </label>
+        <div class="ai-assist" aria-live="polite"></div>
       </section>
 
       <section class="step">
         <h3><span class="step-number">2</span>¿Qué vende?</h3>
+        <input type="hidden" name="category" value="${l?.category ?? ''}">
         <label>Nombre del producto
           <input name="product" required maxlength="60" placeholder="Ej: Papa criolla" value="${l?.product ?? ''}">
         </label>
