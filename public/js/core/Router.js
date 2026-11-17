@@ -22,6 +22,7 @@ export class Router {
     this.defaultRoute = defaultRoute;
     this.guard = guard;
     this.current = null;
+    this.route = null;
   }
 
   start() {
@@ -54,12 +55,14 @@ export class Router {
 
     this.current?.unmount();
     this.current = new View({ ...this.context, query: new URLSearchParams(query) });
-    this.#markActiveLink(route);
+    this.route = route;
+    this.markActiveLink();
     await this.current.mount(this.container);
     performance.measure(`view ${route}`, mark);
   }
 
-  #markActiveLink(route) {
+  /** Highlights the link of the current section (also after the header is re-rendered). */
+  markActiveLink(route = this.route) {
     for (const a of document.querySelectorAll('[data-route]')) {
       a.classList.toggle('active', a.dataset.route === route);
       if (a.dataset.route === route) a.setAttribute('aria-current', 'page');

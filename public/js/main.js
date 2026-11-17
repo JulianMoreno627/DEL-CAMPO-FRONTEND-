@@ -6,6 +6,8 @@ import { PerformanceMonitor } from './metrics/PerformanceMonitor.js';
 import { WorkerClient } from './workers/WorkerClient.js';
 import { html } from './utils/format.js';
 import { icon } from './utils/icons.js';
+import { avatar, roleLabel } from './utils/avatar.js';
+import { currentTheme, toggleTheme } from './core/theme.js';
 
 // 1) Metrics first, so FCP/LCP of the initial load are not lost
 const monitor = new PerformanceMonitor({ reportUrl: `${API_URL}/api/metrics` });
@@ -75,24 +77,84 @@ const SECTIONS = {
 };
 const nav = document.getElementById('nav');
 const account = document.getElementById('account');
-let renderedUserId;
+let renderedKey;
+let router = null; // created below; the header marks the active section through it
+
+/** The profile changed (data or photo): saved in the session so it survives a reload. */
+function updateSessionUser(user) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ token: store.state.token, user })); } catch { /* private mode */ }
+  store.update({ user });
+}
 
 function renderHeader({ user, cartCount }) {
-  if (user?.id !== renderedUserId) {
-    renderedUserId = user?.id;
+  // Re-render only when what the header shows changes (not on every cart update)
+  const key = user ? `${user.id}|${user.name}|${user.avatar ?? ''}` : '';
+  if (key !== renderedKey) {
+    renderedKey = key;
     nav.hidden = !user;
     nav.innerHTML = user ? String(html`${SECTIONS[user.role].map(([route, text, iconName]) =>
       html`<a href="#${route}" data-route="${route}">${icon(iconName, { size: 18 })}${text}${route === '/carrito' ? html`<span id="cart-badge" class="badge"></span>` : ''}</a>`)}`) : '';
-    account.innerHTML = user ? String(html`
-      <span class="avatar" aria-hidden="true">${user.name.slice(0, 1).toUpperCase()}</span>
-      <span class="account-text"><b>${user.name}</b><small>${user.role === 'PRODUCER' ? 'Productor' : 'Comprador'}</small></span>
-      <button class="logout-button" type="button" data-action="logout">${icon('logout', { size: 16 })}Salir</button>`) : '';
+    account.innerHTML = String(user ? accountMenu(user) : themeButton());
+    router?.markActiveLink();
   }
   const badge = document.getElementById('cart-badge');
   if (badge) badge.textContent = cartCount ? String(cartCount) : '';
 }
 
-account.addEventListener('click', (e) => { if (e.target.closest('[data-action="logout"]')) endSession(); });
+/** Logged in: photo, name and a menu with the profile, the theme and the logout. */
+function accountMenu(user) {
+  return html`
+<div class="account-menu">
+  <button class="account-button" type="button" data-action="toggle-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="account-popover">
+    ${avatar(user, API_URL, { size: 36 })}
+    <span class="account-text"><b>${user.name}</b><small>${roleLabel(user.role)}</small></span>
+    ${icon('chevron', { size: 16, className: 'chevron' })}
+  </button>
+  <div class="account-popover" id="account-popover" role="menu" hidden>
+    <div class="account-popover-header">
+      ${avatar(user, API_URL, { size: 46 })}
+      <div><b>${user.name}</b><small>${roleLabel(user.role)}</small></div>
+    </div>
+    <a role="menuitem" href="#/perfil" data-action="close-menu">${icon('user', { size: 18 })}Mi perfil</a>
+    <button role="menuitemcheckbox" type="button" data-action="toggle-theme" class="theme-item">${themeLabel()}</button>
+    <button role="menuitem" type="button" data-action="logout" class="danger-item">${icon('logout', { size: 18 })}Cerrar sesión</button>
+  </div>
+</div>`;
+}
+
+/** Logged out: only the theme switch. */
+const themeButton = () => html`<button class="icon-btn theme-toggle" type="button" data-action="toggle-theme" aria-label="Cambiar tema">${icon(currentTheme() === 'dark' ? 'sun' : 'moon', { size: 18 })}</button>`;
+
+function themeLabel() {
+  const dark = currentTheme() === 'dark';
+  return html`${icon(dark ? 'sun' : 'moon', { size: 18 })}<span>${dark ? 'Modo claro' : 'Modo oscuro'}</span><span class="switch ${dark ? 'on' : ''}" aria-hidden="true"></span>`;
+}
+
+function toggleMenu(open) {
+  const popover = document.getElementById('account-popover');
+  const button = account.querySelector('[data-action="toggle-menu"]');
+  if (!popover) return;
+  const show = open ?? popover.hidden;
+  popover.hidden = !show;
+  button.setAttribute('aria-expanded', String(show));
+}
+
+account.addEventListener('click', (e) => {
+  const action = e.target.closest('[data-action]')?.dataset.action;
+  if (action === 'toggle-menu') toggleMenu();
+  if (action === 'toggle-theme') toggleTheme();
+  if (action === 'close-menu') toggleMenu(false);
+  if (action === 'logout') { toggleMenu(false); endSession(); }
+});
+// Close the menu when clicking outside or with Escape
+document.addEventListener('click', (e) => { if (!account.contains(e.target)) toggleMenu(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleMenu(false); });
+// The theme changed (from the menu or the profile page): update the controls without closing the menu
+window.addEventListener('themechange', () => {
+  const item = account.querySelector('.theme-item');
+  if (item) item.innerHTML = String(themeLabel());
+  else account.innerHTML = String(store.state.user ? accountMenu(store.state.user) : themeButton());
+});
 store.subscribe(renderHeader);
 renderHeader(store.state);
 if (store.state.user?.role === 'BUYER') refreshCartCount();
@@ -123,7 +185,7 @@ function guard(route) {
   return HOME[user.role];
 }
 
-const router = new Router(document.getElementById('view'), {
+router = new Router(document.getElementById('view'), {
   '/entrar': () => import('./views/LoginView.js'),
   '/mis-anuncios': () => import('./views/MyProductsView.js'),
   '/productos': () => import('./views/ProductsView.js'),
@@ -132,7 +194,7 @@ const router = new Router(document.getElementById('view'), {
   '/rendimiento': () => import('./views/PerformanceView.js'),
 }, {
   store, api, monitor, workers, notify, apiUrl: API_URL,
-  startSession, refreshCartCount,
+  startSession, refreshCartCount, updateSessionUser,
 }, { guard });
 
 await router.start();
