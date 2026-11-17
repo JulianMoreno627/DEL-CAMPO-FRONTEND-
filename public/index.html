@@ -6,6 +6,12 @@
   <title>Del Campo · Comercio directo campesino–consumidor</title>
   <meta name="description" content="Compre directo al campesino: los productores publican lo que cultivan y usted lo compra.">
   <meta name="theme-color" content="#ffffff">
+  <!-- Theme before the first paint (no white flash): light by default, dark if the user chose it -->
+  <script>
+    try { document.documentElement.dataset.theme = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light'; }
+    catch { document.documentElement.dataset.theme = 'light'; }
+    if (document.documentElement.dataset.theme === 'dark') document.querySelector('meta[name="theme-color"]').content = '#16201a';
+  </script>
   <!-- Backend URL (another repository). It can be changed without rebuilding. -->
   <meta name="api-url" content="https://del-campo-backend.onrender.com">
   <link rel="manifest" href="/manifest.webmanifest">
