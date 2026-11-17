@@ -11,7 +11,7 @@
  *
  * Also: Web Push handlers ready for the next delivery.
  */
-const VERSION = 'v8';
+const VERSION = 'v9';
 const SHELL_CACHE = `shell-${VERSION}`;
 const API_CACHE = `api-${VERSION}`;
 const IMAGE_CACHE = `img-${VERSION}`;
