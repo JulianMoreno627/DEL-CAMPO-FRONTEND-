@@ -7,8 +7,6 @@ const PROFILES = {
   BUYER: { title: 'Quiero comprar', detail: 'Compro directo al campesino', icon: 'basket', className: 'buyer' },
 };
 
-const BUYER_TYPES = [['CONSUMER', 'Hogar'], ['STORE', 'Tienda'], ['RESTAURANT', 'Restaurante']];
-
 const STEPS = [
   ['camera', 'El campesino publica', 'Toma una foto de su cosecha, la IA llena los datos y él pone su precio.'],
   ['basket', 'Usted elige', 'Ve productos frescos de la región, con el precio que fijó quien los cultiva.'],
@@ -54,7 +52,6 @@ export default class LoginView extends Component {
   async submit(form) {
     const { role, signingUp } = this.state;
     const data = { ...Object.fromEntries(new FormData(form)), role };
-    for (const key of ['phone', 'town', 'farm']) if (!data[key]) delete data[key]; // optional fields left empty
     const { password: _password, ...values } = data; // keep what was typed (except the password) if there is an error
     this.setState({ sending: true, error: null, values });
     try {
@@ -142,14 +139,7 @@ export default class LoginView extends Component {
 <form class="login-form">
   ${signingUp ? html`
   <label>Nombre completo <input name="name" required autocomplete="name" value="${v.name ?? ''}"></label>
-  ${isProducer ? html`
-  <div class="two-columns">
-    <label>Nombre de su finca <input name="farm" placeholder="Ej: La Esperanza" value="${v.farm ?? ''}"></label>
-    <label>Municipio o vereda <input name="town" placeholder="Ej: Ventaquemada" value="${v.town ?? ''}"></label>
-  </div>` : html`
-  <label>¿Para quién compra?
-    <select name="type">${BUYER_TYPES.map(([value, text]) => html`<option value="${value}" ${v.type === value ? 'selected' : ''}>${text}</option>`)}</select>
-  </label>`}
+  ${isProducer ? html`<label>Municipio o vereda <input name="town" placeholder="Ej: Ventaquemada" value="${v.town ?? ''}"></label>` : ''}
   <label>Teléfono (opcional) <input name="phone" type="tel" autocomplete="tel" value="${v.phone ?? ''}"></label>` : ''}
   <label>Correo <input name="email" type="email" required autocomplete="email" value="${v.email ?? ''}"></label>
   <label>Contraseña <input name="password" type="password" required minlength="6" autocomplete="${signingUp ? 'new-password' : 'current-password'}"></label>
