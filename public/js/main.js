@@ -173,6 +173,7 @@ const ACCESS = {
   '/productos': 'BUYER',
   '/carrito': 'BUYER',
   '/pedidos': 'LOGGED_IN',
+  '/perfil': 'LOGGED_IN',
   '/rendimiento': 'EVERYONE',
 };
 
@@ -191,10 +192,11 @@ router = new Router(document.getElementById('view'), {
   '/productos': () => import('./views/ProductsView.js'),
   '/carrito': () => import('./views/CartView.js'),
   '/pedidos': () => import('./views/OrdersView.js'),
+  '/perfil': () => import('./views/ProfileView.js'),
   '/rendimiento': () => import('./views/PerformanceView.js'),
 }, {
   store, api, monitor, workers, notify, apiUrl: API_URL,
-  startSession, refreshCartCount, updateSessionUser,
+  startSession, endSession, refreshCartCount, updateSessionUser,
 }, { guard });
 
 await router.start();
