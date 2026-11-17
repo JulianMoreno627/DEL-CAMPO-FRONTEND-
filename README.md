@@ -18,10 +18,28 @@ La URL del backend se configura en `<meta name="api-url">` de `public/index.html
 
 ## Cómo se usa
 
-Al entrar se elige el perfil:
+La pantalla de inicio explica la plataforma (cómo funciona, qué gana el productor y qué gana el comprador) y tiene el panel de ingreso arriba. Al entrar se elige el perfil:
 
 - **Soy productor** → *Mis productos*: publica lo que cultiva (foto, nombre, descripción, precio y cantidad) con una vista previa en vivo; edita o elimina sus productos y en *Pedidos recibidos* confirma y entrega lo que le compraron.
 - **Quiero comprar** → *Productos*: ve los productos con el precio que fijó el productor, abre el detalle, los agrega al *Carrito* y compra. Sus compras quedan en *Mis pedidos*.
+
+Al registrarse, el comprador elige para quién compra (hogar, tienda o restaurante) y el productor puede escribir el nombre de su finca.
+
+Las pantallas principales saludan al usuario por su nombre, con su foto.
+
+**Menú de cuenta.** El botón con la foto, arriba a la derecha, abre un menú con *Mi perfil*, el cambio a modo claro u oscuro y *Cerrar sesión*.
+
+**Mi perfil** (`#/perfil`):
+- Cambiar la foto de perfil. Se comprime en el Web Worker a unos 400 px antes de subirse y se guarda en el backend (Neon).
+- Editar los datos: el nombre y el teléfono; el productor, además, su finca, vereda y municipio; el comprador, su tipo.
+- Ver la reputación.
+- Elegir el tema.
+- Cerrar sesión.
+
+**Tema claro u oscuro.**
+- Viene en **claro** por defecto y el usuario lo cambia desde el menú o desde *Mi perfil*.
+- La elección se guarda en el navegador y se aplica antes del primer pintado, para que no haya un destello blanco.
+- Todos los colores son variables de CSS: el modo oscuro solo redefine esas variables (`html[data-theme="dark"]`).
 
 La vista de métricas de rendimiento sigue disponible en `#/rendimiento` (no aparece en el menú).
 
