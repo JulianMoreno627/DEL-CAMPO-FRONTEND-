@@ -11,7 +11,7 @@
  *
  * Also: Web Push handlers ready for the next delivery.
  */
-const VERSION = 'v7';
+const VERSION = 'v8';
 const SHELL_CACHE = `shell-${VERSION}`;
 const API_CACHE = `api-${VERSION}`;
 const IMAGE_CACHE = `img-${VERSION}`;
@@ -30,6 +30,7 @@ const APP_SHELL = [
   '/js/core/ApiClient.js',
   '/js/core/Component.js',
   '/js/core/Router.js',
+  '/js/core/theme.js',
   '/js/metrics/PerformanceMonitor.js',
   '/js/workers/WorkerClient.js',
   '/js/workers/geo.worker.js',
@@ -37,13 +38,16 @@ const APP_SHELL = [
   '/js/utils/format.js',
   '/js/utils/geo.js',
   '/js/utils/icons.js',
+  '/js/utils/avatar.js',
   '/js/components/product.js',
+  '/js/components/welcome.js',
   '/js/views/LoginView.js',
   '/js/views/MyProductsView.js',
   '/js/views/ProductsView.js',
   '/js/views/CartView.js',
   '/js/views/OrdersView.js',
   '/js/views/PerformanceView.js',
+  '/js/views/ProfileView.js',
 ];
 
 // API routes that can be cached (they do not depend on the user asking)
@@ -83,7 +87,8 @@ self.addEventListener('fetch', (event) => {
     if (API_NETWORK_FIRST.some((r) => r.test(url.pathname))) return event.respondWith(networkFirst(request, API_CACHE));
     return; // the rest of the API (cart, orders, metrics…): always to the network
   }
-  if (url.pathname.startsWith('/uploads/')) return event.respondWith(cacheFirst(request, IMAGE_CACHE));
+  // Listing photos and profile photos: their names change on every upload, so cache-first is safe
+  if (url.pathname.startsWith('/uploads/') || url.pathname.startsWith('/avatars/')) return event.respondWith(cacheFirst(request, IMAGE_CACHE));
   if (url.origin !== self.location.origin) return;
 
   // SPA navigation: always the app shell (the routes live in the #hash)
