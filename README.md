@@ -23,10 +23,6 @@ La pantalla de inicio explica la plataforma (cómo funciona, qué gana el produc
 - **Soy productor** → *Mis productos*: publica lo que cultiva (foto, nombre, descripción, precio y cantidad) con una vista previa en vivo; edita o elimina sus productos y en *Pedidos recibidos* confirma y entrega lo que le compraron.
 - **Quiero comprar** → *Productos*: ve los productos con el precio que fijó el productor, abre el detalle, los agrega al *Carrito* y compra. Sus compras quedan en *Mis pedidos*.
 
-Al registrarse, el comprador elige para quién compra (hogar, tienda o restaurante) y el productor puede escribir el nombre de su finca.
-
-Las pantallas principales saludan al usuario por su nombre, con su foto.
-
 **Menú de cuenta.** El botón con la foto, arriba a la derecha, abre un menú con *Mi perfil*, el cambio a modo claro u oscuro y *Cerrar sesión*.
 
 **Mi perfil** (`#/perfil`):

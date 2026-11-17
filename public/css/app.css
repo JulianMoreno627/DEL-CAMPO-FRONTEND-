@@ -208,17 +208,6 @@ textarea { resize: vertical; }
 .theme-choice[aria-pressed="true"] { border-color: var(--green); background: var(--green-soft); color: var(--green-ink); }
 .profile-grid .stack .btn { margin-top: 12px; }
 
-/* ---------- Welcome banner of the main screens */
-.welcome { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; margin-bottom: 22px; padding: 22px 24px; border: 1px solid var(--border); border-radius: 22px; box-shadow: var(--shadow); background: linear-gradient(120deg, var(--green-soft), var(--surface) 55%, var(--harvest-light)); }
-.welcome-text { flex: 1 1 260px; min-width: 0; }
-.welcome-greeting { margin: 0; color: var(--green-text); font-weight: 700; }
-.welcome h1 { margin: 2px 0 4px; font-size: clamp(1.5rem, 3vw, 1.9rem); }
-.welcome .subtitle { margin: 0; }
-.welcome-actions { display: flex; flex: 0 1 auto; gap: 10px; }
-.welcome-actions .search { flex: 1 1 340px; }
-.welcome-actions:has(.search) { flex: 1 1 340px; }
-@media (max-width: 520px) { .welcome { padding: 18px; } .welcome-avatar { display: none; } .welcome-actions, .welcome-actions .btn { width: 100%; } }
-
 /* ---------- Section header */
 .section-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; margin-bottom: 18px; }
 .section-header h1 { margin-bottom: 2px; }

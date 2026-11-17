@@ -40,7 +40,6 @@ const APP_SHELL = [
   '/js/utils/icons.js',
   '/js/utils/avatar.js',
   '/js/components/product.js',
-  '/js/components/welcome.js',
   '/js/views/LoginView.js',
   '/js/views/MyProductsView.js',
   '/js/views/ProductsView.js',
