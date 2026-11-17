@@ -2,6 +2,7 @@ import { Component } from '../core/Component.js';
 import { html, formatPrice } from '../utils/format.js';
 import { icon } from '../utils/icons.js';
 import { productCard, productPhoto } from '../components/product.js';
+import { welcomeBanner } from '../components/welcome.js';
 
 const UNITS = ['kg', 'libra', 'unidad', 'docena', 'bulto', 'canastilla', 'atado'];
 const MAX_DESCRIPTION = 300;
@@ -277,13 +278,13 @@ export default class MyProductsView extends Component {
 
   template() {
     return html`
-<div class="section-header">
-  <div>
-    <h1>Mis productos</h1>
-    <p class="subtitle">Lo que publique aquí lo verán los compradores, con el precio que usted ponga.</p>
-  </div>
-  <button class="btn large" data-action="new">${icon('plus', { size: 20 })}Nuevo producto</button>
-</div>
+${welcomeBanner({
+    user: this.props.store.state.user,
+    apiUrl: this.props.apiUrl,
+    title: 'Mis productos',
+    subtitle: 'Lo que publique aquí lo verán los compradores, con el precio que usted ponga.',
+    actions: html`<button class="btn large" data-action="new">${icon('plus', { size: 20 })}Nuevo producto</button>`,
+  })}
 <div id="summary" class="producer-summary"></div>
 <div id="list"><p class="loading">Cargando…</p></div>
 <dialog id="editor" class="dialog" aria-labelledby="editor-title"></dialog>`;

@@ -2,6 +2,7 @@ import { Component } from '../core/Component.js';
 import { html, formatPrice } from '../utils/format.js';
 import { icon } from '../utils/icons.js';
 import { productCard, productPhoto, availabilityText, quantitySelector, enableQuantitySelectors } from '../components/product.js';
+import { welcomeBanner } from '../components/welcome.js';
 
 /**
  * Buyer profile: the products published by producers, only with the price they set.
@@ -85,19 +86,18 @@ export default class ProductsView extends Component {
 
   // The search box is rendered once; only #list is re-rendered so typing keeps the focus
   template() {
-    const firstName = this.props.store.state.user?.name.split(' ')[0] ?? '';
     return html`
-<div class="section-header">
-  <div>
-    <h1>Hola, ${firstName}</h1>
-    <p class="subtitle">Productos frescos, directo de quien los cultiva.</p>
-  </div>
-  <label class="search">
+${welcomeBanner({
+    user: this.props.store.state.user,
+    apiUrl: this.props.apiUrl,
+    title: '¿Qué va a llevar hoy?',
+    subtitle: 'Productos frescos, directo de quien los cultiva.',
+    actions: html`<label class="search">
     <span class="visually-hidden">Buscar</span>
     ${icon('search', { size: 18 })}
-    <input name="search" type="search" placeholder="Buscar producto…" value="${this.state.search}">
-  </label>
-</div>
+    <input name="search" type="search" placeholder="Buscar papa, mora, fresa…" value="${this.state.search}">
+  </label>`,
+  })}
 <div id="list"><p class="loading">Cargando productos…</p></div>
 <dialog id="detail" class="dialog" aria-label="Detalle del producto"></dialog>`;
   }
